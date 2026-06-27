@@ -22,13 +22,13 @@ def get_weather(lat, lon):
         "temperature_unit": "fahrenheit",
     })
     return r.json()["current"]["temperature_2m"]
+
 # Find real venues in a city using free OpenStreetMap data.
 def find_venues(city, limit=3):
     coords = geocode(city)
     if not coords:
         return []
     lat, lon = coords
-    # Look within ~12 km of the city center for music and event spots.
     query = f"""
     [out:json][timeout:25];
     (
@@ -42,7 +42,6 @@ def find_venues(city, limit=3):
         elements = r.json().get("elements", [])
     except Exception:
         return ["venue lookup busy, try again"]
-    
     venues = []
     for el in elements:
         name = el.get("tags", {}).get("name")
@@ -56,28 +55,47 @@ def find_venues(city, limit=3):
 def transport_note(vehicle_hint):
     return f"{vehicle_hint}. Confirm rental availability per city."
 
-sample = """
-The band is Las Cafeteras, 6 people plus gear.
-We play Austin on August 10, Houston on August 12, San Antonio on August 14.
-Mostly driving between cities. Mid-size budget.
-"""
+# Gather all research for a tour and return it as data.
+def run_research(tour_description):
+    plan = build_plan(tour_description)
+    stops = []
+    for stop in plan["stops"]:
+        city = stop["city"]
+        coords = geocode(city)
+        if coords:
+            temp = get_weather(coords[0], coords[1])
+            weather = f"{temp}F (current reading)"
+        else:
+            weather = "weather unavailable"
+        venues = find_venues(city)
+        venue_line = ", ".join(venues) if venues else "no venues found"
+        stops.append({
+            "city": city,
+            "date": stop.get("date", ""),
+            "weather": weather,
+            "transport": transport_note(plan["vehicle_hint"]),
+            "venues": venue_line,
+        })
+    return {
+        "band_name": plan["band_name"],
+        "party_size": plan["party_size"],
+        "vehicle_hint": plan["vehicle_hint"],
+        "stops": stops,
+    }
 
-plan = build_plan(sample)
-print("Researching tour for:", plan["band_name"])
-print()
 
-for stop in plan["stops"]:
-    city = stop["city"]
-    coords = geocode(city)
-    if coords:
-        temp = get_weather(coords[0], coords[1])
-        weather_line = f"{temp}F right now"
-    else:
-        weather_line = "city not found"
-    print(city)
-    print("  weather:", weather_line)
-    print("  transport:", transport_note(plan["vehicle_hint"]))
-    venues = find_venues(city)
-    venue_line = ", ".join(venues) if venues else "no venues found, try a nearby city"
-    print("  venues:", venue_line)
+if __name__ == "__main__":
+    sample = """
+    The band is Las Cafeteras, 6 people plus gear.
+    We play Austin on August 10, Houston on August 12, San Antonio on August 14.
+    Mostly driving between cities. Mid-size budget.
+    """
+    data = run_research(sample)
+    print("Researching tour for:", data["band_name"])
     print()
+    for s in data["stops"]:
+        print(s["city"], s["date"])
+        print("  weather:", s["weather"])
+        print("  transport:", s["transport"])
+        print("  venues:", s["venues"])
+        print()
